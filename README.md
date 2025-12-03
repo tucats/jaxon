@@ -9,6 +9,40 @@ floating point value, boolean, or string). Arrays and objects can have nested JS
 The query string format allows you to specify the named field, the array index (a zero-based
 value or an `*` indicating all values), or a dot indicating the entire value.  Multiple dots separate each part of the query.
 
+## API
+
+There are two API entry points, depending on whether the query is expected to return
+a single value, or an array of values. The first parameter is a string containing the
+JSON text to evaluate, and the second parameter is the query expression.
+
+For example, to read a single value, use:
+
+```go
+value, err := jaxon.GetItem(jsonText, "user.age")
+```
+
+The result value is always a string, which contains the text representation of the
+result. So if the query is expected to return an integer value, the caller would
+need to convert the resulting value to an integer (using `strconv.Atoi()`, for
+example).
+
+The function returns an error if the query results in anything other than a single
+value. If there are multiple possible results to the query, the error reports that
+the query was ambiguous. If there are no results, the query reports an error code
+of "not found".
+
+To get an array of results, use:
+
+```go
+value, err := jaxon.GetItem(jsonText, "items[0:3]")
+```
+
+In this example, value is an array of strings, each of which represents one of
+the possible items returned by the query. If the query produces no values, then
+it is not an error but the array will have a length of zero. In the above example,
+the array should contain four values, being teh array indexes 0, 1, 2, and 3 from
+the array named `items` in the JSON text.
+
 ## Single items
 
 A single item (or the last item in a query) can be specified using the "." character. For
@@ -137,3 +171,17 @@ It is an error to specify a query string for an array index that does not exist
 array.
 
 Similarly, it is an error to use array notation for a value that is not an array.
+
+`jaxon` errors are a custom type Err which matches the `error` interface. You can
+extract the error code and the context value (if any) for the error using the
+function:
+
+```go
+code, context := e.Extract()
+```
+
+Where `e` is an error returned from `jaxon`. The code is a string value that
+uniquely identifies each error. Some errors have additional context (such as
+an unrecognized name, etc.) and these values are returned as the context. If
+the error does not have a context, the value is an empty string when returned
+from `Extract()`.

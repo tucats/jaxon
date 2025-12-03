@@ -37,6 +37,54 @@ func format(item any) ([]string, error) {
 		return result, nil
 	}
 
+	// If the item is an array of int, then reformat as more JSON.
+	if a, ok := item.([]int); ok {
+		var result []string
+
+		for _, v := range a {
+			r, err := format(v)
+			if err != nil {
+				return nil, err
+			}
+
+			result = append(result, r...)
+		}
+
+		return result, nil
+	}
+
+	// If the item is an array of float64, then reformat as more JSON.
+	if a, ok := item.([]float64); ok {
+		var result []string
+
+		for _, v := range a {
+			r, err := format(v)
+			if err != nil {
+				return nil, err
+			}
+
+			result = append(result, r...)
+		}
+
+		return result, nil
+	}
+
+	// If the item is an array of strings, then reformat as more JSON.
+	if a, ok := item.([]string); ok {
+		var result []string
+
+		for _, v := range a {
+			r, err := format(v)
+			if err != nil {
+				return nil, err
+			}
+
+			result = append(result, r...)
+		}
+
+		return result, nil
+	}
+
 	// If it's a float, see if it should really be formatted
 	// as an integer.
 	if f, ok := item.(float64); ok {
