@@ -1,16 +1,13 @@
-# JSON Query Strings
+# JAXON JSON Query Processor
 
-This documents JSON query strings, which are used in the `--json-query` global option
-to the Ego cli command. When this option is specified, it causes the output format to
-be set to "JSON" and also specifies a query string as the option parameter. This string
-is used to select elements of the JSON output to print, instead of printing the entire
-item.
+`jaxon` is a package that supports a query against an arbitrary JSON string. The query
+can be used to extract a individual item from the JSON, or an array of items if there are
+multiple possible values for the query expression.
 
 The JSON value can be an array, an object (with named fields) or a scalar value (integer,
 floating point value, boolean, or string). Arrays and objects can have nested JSON values.
 The query string format allows you to specify the named field, the array index (a zero-based
-value or an `*` indicating all values), or a dot indicating the entire value.  Multiple dots
-separate each part of the query.
+value or an `*` indicating all values), or a dot indicating the entire value.  Multiple dots separate each part of the query.
 
 ## Single items
 
