@@ -38,9 +38,36 @@ func Test_format(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// Regression test: a JSON "null" decodes to a Go nil interface
+			// value. format() must report this as the string "null" (JSON's
+			// own spelling), not Go's internal "<nil>" representation.
+			name:    "JSON null value",
+			item:    nil,
+			want:    []string{"null"},
+			wantErr: false,
+		},
+		{
 			name:    "simple array of ints value",
 			item:    []int{1, 2, 3},
 			want:    []string{"1", "2", "3"},
+			wantErr: false,
+		},
+		{
+			// format() has its own dedicated case for []float64, distinct
+			// from the []int case above and the []any case earlier in
+			// this table - this exercises it directly, since nothing
+			// else in this package's tests passes a raw []float64 to
+			// format().
+			name:    "simple array of float64 values",
+			item:    []float64{1.5, 2.0, 3.25},
+			want:    []string{"1.5", "2", "3.25"},
+			wantErr: false,
+		},
+		{
+			// Likewise for format()'s dedicated []string case.
+			name:    "simple array of string values",
+			item:    []string{"a", "b", "c"},
+			want:    []string{"a", "b", "c"},
 			wantErr: false,
 		},
 		{

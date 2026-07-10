@@ -11,6 +11,7 @@ const (
 	ErrArrayIndex          = "jaxon.array.index"
 	ErrArrayType           = "jaxon.array.type"
 	ErrArrayNotFound       = "jaxon.array.not.found"
+	ErrEmptyIndex          = "jaxon.empty.index"
 	ErrNotFound            = "jaxon.not.found"
 	ErrAmbiguous           = "jaxon.ambiguous"
 	ErrJSONQuery           = "jaxon.json.query"

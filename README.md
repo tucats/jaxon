@@ -9,6 +9,20 @@ floating point value, boolean, or string). Arrays and objects can have nested JS
 The query string format allows you to specify the named field, the array index (a zero-based
 value or an `*` indicating all values), or a dot indicating the entire value. Multiple dots separate each part of the query.
 
+## About JAXON
+
+The `jaxon` package grew out of working on creating a generalize REST API test harness, and
+I needed to have rich queries against the resulting JSON payloads. This become more useful
+as I also worked on other tools that might generate large JSON payloads, and it would be
+nice to add the ability to query the results and/or simplify them without having to add on
+additional dependancies like `jq`. Thus, `jaxon` came about.
+
+The project was created without AI, but subseuqently Claude Code (Opus 4.6 model) was used
+to audit the code and write more comprehensive unit tests.
+
+*If `jaxon` had a logo, it would be an orange tabby cat looking at you suspiciously, wondering
+what it is you want.*
+
 ## API
 
 There are two API entry points, depending on whether the query is expected to return
@@ -34,14 +48,60 @@ of "not found".
 To get an array of results, use:
 
 ```go
-value, err := jaxon.GetItem(jsonText, "items[0:3]")
+value, err := jaxon.GetItems(jsonText, "items[0:3]")
 ```
 
 In this example, value is an array of strings, each of which represents one of
 the possible items returned by the query. If the query produces no values, then
 it is not an error but the array will have a length of zero. In the above example,
-the array should contain four values, being teh array indexes 0, 1, 2, and 3 from
+the array should contain four values, being the array indexes 0, 1, 2, and 3 from
 the array named `items` in the JSON text.
+
+## Querying Go Values
+
+If you have a Go value instead of a JSON string - a struct, map, slice, or
+any combination of these - you can query it directly with `GetObjectItem`
+and `GetObjectItems`, without having to marshal it to JSON yourself first.
+They work exactly like `GetItem` and `GetItems`, except the first parameter
+is an arbitrary Go value instead of a JSON string; the value is converted
+to JSON internally (the same way `encoding/json`'s `json.Marshal` would)
+and then queried exactly as if you had passed that JSON text to `GetItem`
+or `GetItems` directly.
+
+For example, given a struct:
+
+```go
+type Person struct {
+    Name string `json:"name"`
+    Age  int    `json:"age"`
+}
+
+value, err := jaxon.GetObjectItem(Person{Name: "John Doe", Age: 30}, "name")
+```
+
+This returns "John Doe", the same result you'd get from marshaling the
+struct to JSON yourself and calling `jaxon.GetItem` with it.
+
+`GetObjectItems` is to `GetObjectItem` what `GetItems` is to `GetItem`: it
+returns an array of string results instead of a single one. For example,
+
+```go
+people := []Person{
+    {Name: "John Doe", Age: 30},
+    {Name: "Jane Doe", Age: 28},
+}
+
+values, err := jaxon.GetObjectItems(people, "*.name")
+```
+
+returns the two names, "John Doe" and "Jane Doe".
+
+Because the Go value is converted to JSON using the standard `encoding/json`
+rules, the usual `json:"..."` struct tags apply: the query string refers to
+the JSON field names as they appear in the marshaled JSON (`"name"` in the
+example above), which are not always the same as the Go struct field names
+(`Name`). If the value cannot be converted to JSON at all (for example, it
+contains a channel or a function value), an error is returned.
 
 ## Single items
 
@@ -126,6 +186,17 @@ as the items at index positions 0 and 1. Note that a query of "0,1" is the same
 as "0:1" since both specify only two index values. However, a query string of "0:2"
 specifies three index values (`0`, `1`, and `2`).
 
+Either side of a range can be left out to mean "the rest of the array" on that
+side. A query string of "2:" (the end left out) means "index 2 through the
+last element," and a query string of ":2" (the start left out) means "the
+first element through index 2." For the JSON value shown above, the query
+string "2:" returns `66`, and the query string ":2" returns `1` and `15` and
+`66`. The same works with brackets, as "[2:]" and "[:2]".
+
+An empty pair of brackets, "[]", is not a valid index or range - there's
+nothing there to say which element(s) you mean - so it's always an error,
+regardless of whether it's applied to an array or an object.
+
 Similar to nested objects, you can reference additional information
 about the array element using the "dot" notation. For example,
 
@@ -161,6 +232,50 @@ Sue
 As the result. The items will be separated by a newline in the output of the
 query expression.
 
+## Wildcards
+
+As shown above, a `*` query segment matches every element of an array. The
+same `*` also works on an object: it matches every value in the object,
+applying the rest of the query to each one and collecting the results into
+a list, the same way it does for an array. For example, for the value
+
+```json
+{
+    "flags": {
+        "beta": true,
+        "dark_mode": false,
+        "new_ui": true
+    }
+}
+```
+
+the query string "flags.*" will return the three values `true`, `false`,
+and `true`. A JSON object doesn't define an order for its fields the way an
+array does, so results from a `*` on an object are always sorted by field
+name first (here, "beta", "dark_mode", "new_ui") to keep the result
+predictable and repeatable from one call to the next.
+
+By default, `*` is strict: every element (or every value) has to match the
+rest of the query, and if even one of them doesn't - for example, one
+object in an array of objects is missing a field the query asks for - the
+whole query fails with an error. If you'd rather collect whatever matches
+and quietly ignore anything that doesn't, use `*?` instead of `*`. This is
+the wildcard equivalent of the optional-field `field?default` syntax
+described above: both use a `?` to mean "this might not be there, and
+that's OK." For example, given
+
+```json
+[
+    { "name": "Alice" },
+    { "id": 42 },
+    { "name": "Carol" }
+]
+```
+
+the query string `*.name` fails, since the second array element has no
+"name" field. The query string `*?.name` instead succeeds, returning just
+`Alice` and `Carol` and silently skipping the element that didn't match.
+
 ## Errors
 
 It is an error to specify a field name in an object that does not exist. It
@@ -172,16 +287,28 @@ array.
 
 Similarly, it is an error to use array notation for a value that is not an array.
 
-`jaxon` errors are a custom type Err which matches the `error` interface. You can
-extract the error code and the context value (if any) for the error using the
-function:
+`jaxon` errors are represented by the `Error` type, which implements the
+`error` interface. Since `GetItem` and `GetItems` return the generic `error`
+interface type, you need to type-assert the result to `*jaxon.Error` before
+you can call `Extract()` to get the error code and the context value (if
+any) for the error:
 
 ```go
-code, context := e.Extract()
+value, err := jaxon.GetItem(jsonText, "user.age")
+if err != nil {
+    if jaxonErr, ok := err.(*jaxon.Error); ok {
+        code, context := jaxonErr.Extract()
+        // ...
+    }
+}
 ```
 
-Where `e` is an error returned from `jaxon`. The code is a string value that
-uniquely identifies each error. Some errors have additional context (such as
-an unrecognized name, etc.) and these values are returned as the context. If
-the error does not have a context, the value is an empty string when returned
-from `Extract()`.
+The code is a string value that uniquely identifies each error. Some errors
+have additional context (such as an unrecognized name, etc.) and these
+values are returned as the context. If the error does not have a context,
+the value is an empty string when returned from `Extract()`.
+
+Note that not every error returned by `GetItem`/`GetItems` is a
+`*jaxon.Error`: if the JSON text itself cannot be parsed, the underlying
+`encoding/json` error is returned unchanged, and the type assertion above
+will fail (`ok` will be `false`) for that case.
